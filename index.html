@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<title>Encrypt This</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔒</text></svg>">
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --text: #1b1f24;
+    --muted: #5b6470;
+    --border: #d6dbe1;
+    --accent: #2f6fed;
+    --accent-text: #ffffff;
+    --danger: #c62828;
+    --ok: #2e7d32;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418;
+      --card: #1b2027;
+      --text: #e6e9ed;
+      --muted: #9aa4b1;
+      --border: #333b46;
+      --accent: #5b8ff9;
+      --accent-text: #0b0e12;
+      --danger: #ef5350;
+      --ok: #66bb6a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: .95rem; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tabs button {
+    flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); font-size: 1rem; cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  label { display: block; font-weight: 600; margin: 12px 0 6px; }
+  label:first-child { margin-top: 0; }
+  textarea, input[type="password"], input[type="text"] {
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font: inherit; /* 16px avoids iOS zoom */
+  }
+  textarea { min-height: 140px; resize: vertical; }
+  textarea.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; word-break: break-all; }
+  .pw-row { display: flex; gap: 8px; }
+  .pw-row input { flex: 1; min-width: 0; }
+  .btn {
+    padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); font-size: 1rem; cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); width: 100%; margin-top: 16px; font-weight: 600; }
+  .btn:disabled { opacity: .6; cursor: default; }
+  .actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .msg { min-height: 1.5em; margin-top: 10px; font-size: .95rem; }
+  .msg.error { color: var(--danger); }
+  .msg.ok { color: var(--ok); }
+  .hidden { display: none; }
+  details { margin-top: 20px; color: var(--muted); font-size: .9rem; }
+  summary { cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🔒 Encrypt This</h1>
+  <p class="sub">Paste a note, pick a password, and save the scrambled output. Everything runs in your browser. Nothing is sent anywhere.</p>
+
+  <div class="tabs" role="tablist">
+    <button id="tab-enc" role="tab" aria-selected="true">Encrypt</button>
+    <button id="tab-dec" role="tab" aria-selected="false">Decrypt</button>
+  </div>
+
+  <section class="card" id="panel">
+    <label for="input" id="input-label">Text to encrypt</label>
+    <textarea id="input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste your note here…"></textarea>
+    <div class="actions">
+      <button class="btn" id="paste">Paste</button>
+      <button class="btn" id="clear">Clear</button>
+    </div>
+
+    <label for="password">Password</label>
+    <div class="pw-row">
+      <input type="password" id="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="btn" id="toggle-pw" type="button">Show</button>
+    </div>
+    <div id="confirm-wrap">
+      <label for="confirm">Confirm password</label>
+      <input type="password" id="confirm" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </div>
+
+    <button class="btn primary" id="go">Encrypt</button>
+    <div class="msg" id="msg" role="status"></div>
+
+    <div id="output-wrap" class="hidden">
+      <label for="output" id="output-label">Encrypted text</label>
+      <textarea id="output" readonly></textarea>
+      <div class="actions">
+        <button class="btn" id="copy">Copy</button>
+        <button class="btn" id="share">Share</button>
+      </div>
+    </div>
+  </section>
+
+  <details>
+    <summary>How it works</summary>
+    <p>Your password is stretched with PBKDF2-SHA256 (600,000 iterations and a random salt) into a 256-bit key. The text is then encrypted with AES-256-GCM, which also detects tampering or a wrong password. The output holds the salt, nonce, and ciphertext, so you need only the output and your password to decrypt.</p>
+    <p>There is no recovery. If you forget the password, the text is gone. Use a long password.</p>
+  </details>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  const PREFIX = "ET1:";
+  const ITERATIONS = 600000;
+  const SALT_LEN = 16;
+  const IV_LEN = 12;
+
+  const enc = new TextEncoder();
+  const dec = new TextDecoder();
+
+  function toBase64(bytes) {
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  }
+
+  function fromBase64(str) {
+    const bin = atob(str);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  async function deriveKey(password, salt) {
+    const base = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+    return crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations: ITERATIONS, hash: "SHA-256" },
+      base,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"]
+    );
+  }
+
+  async function encryptText(plaintext, password) {
+    const salt = crypto.getRandomValues(new Uint8Array(SALT_LEN));
+    const iv = crypto.getRandomValues(new Uint8Array(IV_LEN));
+    const key = await deriveKey(password, salt);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(plaintext)));
+    const packed = new Uint8Array(SALT_LEN + IV_LEN + ct.length);
+    packed.set(salt, 0);
+    packed.set(iv, SALT_LEN);
+    packed.set(ct, SALT_LEN + IV_LEN);
+    return PREFIX + toBase64(packed);
+  }
+
+  async function decryptText(payload, password) {
+    let body = payload.replace(/\s+/g, "");
+    if (!body.startsWith(PREFIX)) throw new Error("This doesn't look like text from Encrypt This (missing ET1: prefix).");
+    body = body.slice(PREFIX.length);
+    let packed;
+    try { packed = fromBase64(body); } catch { throw new Error("The encrypted text is damaged or incomplete."); }
+    if (packed.length < SALT_LEN + IV_LEN + 16) throw new Error("The encrypted text is too short. Did it get cut off?");
+    const salt = packed.subarray(0, SALT_LEN);
+    const iv = packed.subarray(SALT_LEN, SALT_LEN + IV_LEN);
+    const ct = packed.subarray(SALT_LEN + IV_LEN);
+    const key = await deriveKey(password, salt);
+    try {
+      return dec.decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct));
+    } catch {
+      throw new Error("Wrong password, or the encrypted text was changed.");
+    }
+  }
+
+  // Expose for testing in the console.
+  window.EncryptThis = { encryptText, decryptText };
+
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    tabEnc: $("tab-enc"), tabDec: $("tab-dec"),
+    input: $("input"), inputLabel: $("input-label"),
+    password: $("password"), confirm: $("confirm"), confirmWrap: $("confirm-wrap"),
+    togglePw: $("toggle-pw"), go: $("go"), msg: $("msg"),
+    outputWrap: $("output-wrap"), output: $("output"), outputLabel: $("output-label"),
+    copy: $("copy"), share: $("share"), paste: $("paste"), clear: $("clear"),
+  };
+
+  let mode = "encrypt";
+
+  function setMsg(text, kind) {
+    els.msg.textContent = text || "";
+    els.msg.className = "msg" + (kind ? " " + kind : "");
+  }
+
+  function setMode(next) {
+    mode = next;
+    const isEnc = mode === "encrypt";
+    els.tabEnc.setAttribute("aria-selected", String(isEnc));
+    els.tabDec.setAttribute("aria-selected", String(!isEnc));
+    els.inputLabel.textContent = isEnc ? "Text to encrypt" : "Encrypted text (starts with ET1:)";
+    els.input.placeholder = isEnc ? "Paste your note here…" : "Paste ET1:… here";
+    els.input.classList.toggle("mono", !isEnc);
+    els.confirmWrap.classList.toggle("hidden", !isEnc);
+    els.go.textContent = isEnc ? "Encrypt" : "Decrypt";
+    els.outputLabel.textContent = isEnc ? "Encrypted text: save this" : "Decrypted text";
+    els.output.classList.toggle("mono", isEnc);
+    els.input.value = "";
+    els.output.value = "";
+    els.confirm.value = "";
+    els.outputWrap.classList.add("hidden");
+    setMsg("");
+  }
+
+  els.tabEnc.addEventListener("click", () => setMode("encrypt"));
+  els.tabDec.addEventListener("click", () => setMode("decrypt"));
+
+  els.togglePw.addEventListener("click", () => {
+    const show = els.password.type === "password";
+    els.password.type = els.confirm.type = show ? "text" : "password";
+    els.togglePw.textContent = show ? "Hide" : "Show";
+  });
+
+  els.paste.addEventListener("click", async () => {
+    try {
+      els.input.value = await navigator.clipboard.readText();
+    } catch {
+      setMsg("Couldn't read the clipboard. Long-press the box and choose Paste.", "error");
+    }
+  });
+
+  els.clear.addEventListener("click", () => {
+    els.input.value = "";
+    els.output.value = "";
+    els.outputWrap.classList.add("hidden");
+    setMsg("");
+  });
+
+  els.go.addEventListener("click", async () => {
+    setMsg("");
+    const input = els.input.value;
+    const pw = els.password.value;
+    if (!input.trim()) return setMsg(mode === "encrypt" ? "Enter some text to encrypt." : "Paste the encrypted text.", "error");
+    if (!pw) return setMsg("Enter a password.", "error");
+    if (mode === "encrypt" && pw !== els.confirm.value) return setMsg("Passwords don't match.", "error");
+
+    els.go.disabled = true;
+    const label = els.go.textContent;
+    els.go.textContent = mode === "encrypt" ? "Encrypting…" : "Decrypting…";
+    try {
+      const result = mode === "encrypt" ? await encryptText(input, pw) : await decryptText(input, pw);
+      els.output.value = result;
+      els.outputWrap.classList.remove("hidden");
+      setMsg(mode === "encrypt" ? "Done. Copy the text below and save it." : "Decrypted.", "ok");
+    } catch (e) {
+      els.outputWrap.classList.add("hidden");
+      setMsg(e.message || "Something went wrong.", "error");
+    } finally {
+      els.go.disabled = false;
+      els.go.textContent = label;
+    }
+  });
+
+  els.copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(els.output.value);
+      setMsg("Copied to clipboard.", "ok");
+    } catch {
+      els.output.select();
+      setMsg("Select the text and copy it manually.", "error");
+    }
+  });
+
+  if (navigator.share) {
+    els.share.addEventListener("click", () => navigator.share({ text: els.output.value }).catch(() => {}));
+  } else {
+    els.share.classList.add("hidden");
+  }
+
+  if (!window.crypto || !crypto.subtle) {
+    els.go.disabled = true;
+    setMsg("This browser can't encrypt here. Open the page over https:// (or localhost).", "error");
+  }
+})();
+</script>
+</body>
+</html>
