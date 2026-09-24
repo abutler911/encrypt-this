@@ -16,9 +16,18 @@ If you forget the password, the text can't be recovered.
 
 Open `index.html` over `https://` or `http://localhost`. Browsers only expose Web Crypto in secure contexts, so the page won't work from a plain `http://` host.
 
-The easiest hosting option is GitHub Pages: **Settings → Pages → Deploy from branch → `main` / root**. After that, add the page to your phone's home screen.
+## Hosting
 
-Local testing:
+The site is hosted on Netlify, which is connected to this repo. Every push to `main` deploys automatically. There is no build step: the build command is empty and the publish directory is the repo root. Netlify serves the custom subdomain on andrewfbutler.com and provides the HTTPS certificate.
+
+To set it up again from scratch:
+
+1. In Netlify, go to **Add new site → Import from Git** and choose this repo. Leave the build command empty and set the publish directory to `/`.
+2. Under **Domain management**, add the subdomain. If Netlify DNS manages andrewfbutler.com, it creates the DNS record and certificate automatically.
+
+On your phone, open the site and use **Add to Home Screen** so it works like an app.
+
+## Local testing
 
 ```sh
 python3 -m http.server 8000
